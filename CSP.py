@@ -1,7 +1,9 @@
 import random
 from typing import Set, Dict, List, TypeVar, Optional
 from abc import ABC, abstractmethod
-from copy import copy
+
+from copy import copy, deepcopy
+from queue import Queue
 
 from util import monitor
 
@@ -14,6 +16,7 @@ class Variable(ABC):
     def startDomain(self) -> Set[Value]:
         """ Returns the set of initial values of this variable (not taking constraints into account). """
         pass
+
 
 class CSP(ABC):
     @property
@@ -97,11 +100,8 @@ class CSP(ABC):
         # var <- Select-Unassigned-Variable(Variables[csp], assignment, csp)
         var = self.selectVariable(assignment, domains)
 
-        i = 0
         # for each value in Order-Domain-Values(var, assignment, csp) do
         for value in self.orderDomain(assignment, domains, var):
-            i += 1
-            print(var, i)
             # if value is consistent with assignment given Constraints[csp] then
             # add {var = value} to assignment
             new_assignment = copy(assignment)  # fy python
@@ -125,6 +125,17 @@ class CSP(ABC):
         domains = self.forwardChecking(initialAssignment, domains)
         return self._solveForwardChecking(initialAssignment, domains)
 
+    def domain_copy(self, domain):
+        # Arrrrhhh, soms heb ik echt een hekel aan Python
+        # Copy -> Wil ni werken, want die dict heeft sets in zich die nog veranderen
+        # Deepcopy -> Wil ni werken, want dan zijn cie variabelen in die set niet meer gelijk aan de oorspronkelijke variabele
+        # Laat mij gerust iets weten als hier een efficientere oplossing voor is dan deze functie
+        cp = dict()
+        for key in domain:
+            cp[key] = copy(domain[key])
+        return cp
+
+
     @monitor
     def _solveForwardChecking(self, assignment: Dict[Variable, Value], domains: Dict[Variable, Set[Value]]) -> Optional[
         Dict[Variable, Value]]:
@@ -133,7 +144,33 @@ class CSP(ABC):
             :return: a complete and valid assignment if one exists, None otherwise.
         """
         # TODO: Implement CSP::_solveForwardChecking (problem 2)
-        pass
+
+        # code based on _solveBruteForce
+
+        # if assignment is complete then return assignment
+        if self.isComplete(assignment):
+            return assignment
+
+        # var <- Select-Unassigned-Variable(Variables[csp], assignment, csp)
+        var = self.selectVariable(assignment, domains)
+
+        # for each value in Order-Domain-Values(var, assignment, csp) do
+        for value in self.orderDomain(assignment, domains, var):
+            # print(var, value)
+            # if value is consistent with assignment given Constraints[csp] then
+            # add {var = value} to assignment
+            new_assignment = copy(assignment)  # fy python
+            new_assignment[var] = value
+
+            new_domains = copy(domains)
+            new_domains[var] = {value}
+
+            new_domains = self.forwardChecking(copy(new_assignment), self.domain_copy(new_domains), var)
+            result = self._solveForwardChecking(copy(new_assignment), self.domain_copy(new_domains))
+
+            if result is not None:
+                return result
+        return None
 
     def forwardChecking(self, assignment: Dict[Variable, Value], domains: Dict[Variable, Set[Value]],
                         variable: Optional[Variable] = None) -> Dict[Variable, Set[Value]]:
@@ -145,7 +182,54 @@ class CSP(ABC):
         :return: the new domains after enforcing all constraints.
         """
         # TODO: Implement CSP::forwardChecking (problem 2)
-        pass
+        # Code based on function AC-3 (csp) returns the CSP, possibly with reduced domains
+        # inputs: csp, a binary CSP with variables {X1, ... Xn}
+
+        # Local variables: queue, a queue of arcs, initially all the arcs in csp
+        queue = Queue()
+        # Add unassigned variables to queue
+        for var1 in self.variables:
+            for var2 in self.neighbors(var1):
+                # if var2 in assignment: continue
+                if variable is not None and variable not in (var1, var2): continue
+                if var1 == var2: continue
+                queue.put((var1, var2))
+
+        while not queue.empty():
+            xi, xj = queue.get()
+
+            # Code based on remove-inconsistent-values(xi, xj) notes p. 7
+            removed = False
+            for x in copy(domains[xi]):
+                satisfied = False
+                for y in copy(domains[xj]):
+                    if self.isValidPairwise(xi, x, xj, y):
+                        satisfied = True
+                        break
+                if not satisfied:
+                    domains[xi].remove(x)
+                    removed = True
+
+
+            if removed:
+                for xk in self.neighbors(xi):
+                    queue.put((xk, xi))
+
+        return domains
+
+    # def remove_inconsistent_values(self, xi, xj, domains):
+    #     # Code based on remove-inconsistent-values(xi, xj) notes p. 7
+    #     removed = False
+    #     for x in domains[xi]:
+    #         satisfied = False
+    #         for y in domains[xj]:
+    #             if self.isValidPairwise(xi, x, xj, y):
+    #                 satisfied = True
+    #                 break
+    #         if not satisfied:
+    #             domains[xi].pop(x)
+    #             removed = True
+    #     return removed
 
     def selectVariable(self, assignment: Dict[Variable, Value], domains: Dict[Variable, Set[Value]]) -> Variable:
         """ Implement a strategy to select the next variable to assign. """
@@ -153,7 +237,7 @@ class CSP(ABC):
         # TODO: Implement CSP::selectVariable (problem 2)
 
     def orderDomain(self, assignment: Dict[Variable, Value], domains: Dict[Variable, Set[Value]], var: Variable) -> \
-    List[Value]:
+            List[Value]:
         """ Implement a smart ordering of the domain values. """
         return list(domains[var])
         # TODO: Implement CSP::orderDomain (problem 2)
