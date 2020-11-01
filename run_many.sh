@@ -1,0 +1,1 @@
+for i in {1..10}; do python3 solver.py queens --method fc --n 50 >> trash.txt; done;

@@ -7,26 +7,41 @@ class Sudoku(CSP):
     def __init__(self):
         super().__init__()
         # TODO: Implement Sudoku::__init__ (problem 4)
+        # self.n = n always 9x9 = 81 cells
+        self._variables = set()
+        for row in range(9):
+            for col in range(9):
+                self._variables.add(Cell(row, col))
 
     @property
     def variables(self) -> Set['Cell']:
         """ Return the set of variables in this CSP. """
         # TODO: Implement Sudoku::variables (problem 4)
+        return self._variables
         pass
 
     def getCell(self, x: int, y: int) -> 'Cell':
         """ Get the  variable corresponding to the cell on (x, y) """
         # TODO: Implement Sudoku::getCell (problem 4)
+        for cell in self._variables:
+            if cell.row == x and cell.col == y:
+                return cell
         pass
 
     def neighbors(self, var: 'Cell') -> Set['Cell']:
         """ Return all variables related to var by some constraint. """
         # TODO: Implement Sudoku::neighbors (problem 4)
+        neighbors = set()
+        for cell in self._variables:
+            if cell.isNeighbor(var):
+                neighbors.add(cell)
+        return neighbors
         pass
 
     def isValidPairwise(self, var1: 'Cell', val1: Value, var2: 'Cell', val2: Value) -> bool:
         """ Return whether this pairwise assignment is valid with the constraints of the csp. """
         # TODO: Implement Sudoku::isValidPairwise (problem 4)
+        return val1 != val2 or not var1.isNeighbor(var2)
         pass
 
     def assignmentToStr(self, assignment: Dict['Cell', Value]) -> str:
@@ -72,15 +87,23 @@ class Sudoku(CSP):
 
 
 class Cell(Variable):
-    def __init__(self):
+    def __init__(self, row, col):
         super().__init__()
         # TODO: Implement Cell::__init__ (problem 4)
         # You can add parameters as well.
+        self.row = row
+        self.col = col
 
+    def isNeighbor(self, cell):
+        if cell == self: return False
+        return cell.row == self.row or \
+               cell.col == self.col or \
+               (int(cell.row / 3) == int(self.row / 3) and int(cell.col / 3) == int(self.col / 3))
+
+    def __repr__(self):
+        return f"({self.row}, {self.col})"
     @property
     def startDomain(self) -> Set[Value]:
         """ Returns the set of initial values of this variable (not taking constraints into account). """
         # TODO: Implement Cell::startDomain (problem 4)
-        pass
-
-
+        return set(range(1, 10, 1))

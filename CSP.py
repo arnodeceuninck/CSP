@@ -4,6 +4,7 @@ from abc import ABC, abstractmethod
 
 from copy import copy, deepcopy
 from queue import Queue
+from pprint import pprint
 
 from util import monitor
 
@@ -70,8 +71,10 @@ class CSP(ABC):
         for variable in assignment:
             for neighbor in self.neighbors(variable):
                 if neighbor not in assignment: continue
+                if variable == neighbor: continue
                 if (variable, neighbor) in skip_pairs: continue
                 if not self.isValidPairwise(variable, assignment[variable], neighbor, assignment[neighbor]):
+                    # print("Nope")
                     return False
                 skip_pairs.add((neighbor, variable))
                 skip_pairs.add((variable, neighbor))
@@ -102,6 +105,7 @@ class CSP(ABC):
 
         # for each value in Order-Domain-Values(var, assignment, csp) do
         for value in self.orderDomain(assignment, domains, var):
+            # print(var, value)
             # if value is consistent with assignment given Constraints[csp] then
             # add {var = value} to assignment
             new_assignment = copy(assignment)  # fy python
@@ -217,30 +221,34 @@ class CSP(ABC):
 
         return domains
 
-    # def remove_inconsistent_values(self, xi, xj, domains):
-    #     # Code based on remove-inconsistent-values(xi, xj) notes p. 7
-    #     removed = False
-    #     for x in domains[xi]:
-    #         satisfied = False
-    #         for y in domains[xj]:
-    #             if self.isValidPairwise(xi, x, xj, y):
-    #                 satisfied = True
-    #                 break
-    #         if not satisfied:
-    #             domains[xi].pop(x)
-    #             removed = True
-    #     return removed
-
     def selectVariable(self, assignment: Dict[Variable, Value], domains: Dict[Variable, Set[Value]]) -> Variable:
         """ Implement a strategy to select the next variable to assign. """
-        return random.choice(list(self.remainingVariables(assignment)))
+        # return random.choice(list(self.remainingVariables(assignment)))
+        # Neem variabele met laagste domain mogelijkheden (want meer variabelen is meer werk om te backtracken)
+        var = None
+        for variable in self.remainingVariables(assignment):
+            if var is None or len(domains[variable]) < len(domains[var]):
+                var = variable
+        return var
         # TODO: Implement CSP::selectVariable (problem 2)
 
     def orderDomain(self, assignment: Dict[Variable, Value], domains: Dict[Variable, Set[Value]], var: Variable) -> \
             List[Value]:
         """ Implement a smart ordering of the domain values. """
-        return list(domains[var])
+        # return list(domains[var])
         # TODO: Implement CSP::orderDomain (problem 2)
+        # variabelen die niet veel in andere domains voorkomen eerst
+        val_occurrances = dict()
+        for var_ in domains:
+            for val in domains[var_]:
+                if val not in val_occurrances:
+                    val_occurrances[val] = 0
+                val_occurrances[val] += 1
+
+        result = list(domains[var])
+        result.sort(key=lambda x: val_occurrances[x])
+        return result
+
 
     def solveAC3(self, initialAssignment: Dict[Variable, Value] = dict()) -> Optional[Dict[Variable, Value]]:
         """ Called to solve this CSP with forward checking and AC3.
@@ -258,14 +266,73 @@ class CSP(ABC):
             :return: a complete and valid assignment if one exists, None otherwise.
         """
         # TODO: Implement CSP::_solveAC3 (problem 3)
-        pass
+
+        # code based on _solveBruteForce
+
+        # if assignment is complete then return assignment
+        if self.isComplete(assignment):
+            return assignment
+
+        # var <- Select-Unassigned-Variable(Variables[csp], assignment, csp)
+        var = self.selectVariable(assignment, domains)
+
+        # for each value in Order-Domain-Values(var, assignment, csp) do
+        for value in self.orderDomain(assignment, domains, var):
+            # print(var, value)
+            # if value is consistent with assignment given Constraints[csp] then
+            # add {var = value} to assignment
+            new_assignment = copy(assignment)  # fy python
+            new_assignment[var] = value
+
+            new_domains = copy(domains)
+            new_domains[var] = {value}
+
+            new_domains = self.forwardChecking(copy(new_assignment), self.domain_copy(new_domains), var)
+            result = self._solveAC3(copy(new_assignment), self.domain_copy(new_domains))
+
+            if result is not None:
+                return result
+        return None
 
     def ac3(self, assignment: Dict[Variable, Value], domains: Dict[Variable, Set[Value]]) -> Dict[Variable, Set[Value]]:
         """ Implement the AC3 algorithm from the theory lectures.
         :return: the new domains ensuring arc consistency.
         """
         # TODO: Implement CSP::ac3 (problem 3)
-        pass
+
+        # Code based on function AC-3 (csp) returns the CSP, possibly with reduced domains
+        # inputs: csp, a binary CSP with variables {X1, ... Xn}
+
+        # Local variables: queue, a queue of arcs, initially all the arcs in csp
+        queue = Queue()
+        # Add unassigned variables to queue
+        for var1 in self.variables:
+            for var2 in self.neighbors(var1):
+                # if var2 in assignment: continue
+                # if variable is not None and variable not in (var1, var2): continue
+                if var1 == var2: continue
+                queue.put((var1, var2))
+
+        while not queue.empty():
+            xi, xj = queue.get()
+
+            # Code based on remove-inconsistent-values(xi, xj) notes p. 7
+            removed = False
+            for x in copy(domains[xi]):
+                satisfied = False
+                for y in copy(domains[xj]):
+                    if self.isValidPairwise(xi, x, xj, y):
+                        satisfied = True
+                        break
+                if not satisfied:
+                    domains[xi].remove(x)
+                    removed = True
+
+            if removed:
+                for xk in self.neighbors(xi):
+                    queue.put((xk, xi))
+
+        return domains
 
 
 def domainsFromAssignment(assignment: Dict[Variable, Value], variables: Set[Variable]) -> Dict[Variable, Set[Value]]:
